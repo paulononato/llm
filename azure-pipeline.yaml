@@ -1,0 +1,38 @@
+trigger:
+- main
+
+variables:
+  AKS_RESOURCE_GROUP: 'rg-elevartech'
+  AKS_CLUSTER_NAME: 'elevartech'
+  KUBERNETES_NAMESPACE: elevartech--llm
+  azureSubscription: 'pipelines'
+
+stages:
+- stage: DeployToKubernetes
+  displayName: Deploy to Kubernetes
+  jobs:
+  - job: ApplyManifests
+    displayName: Apply Kubernetes Manifests
+    steps:
+
+    # Login no Azure e Configuração do Kubeconfig
+    - task: AzureCLI@2
+      displayName: 'Login no Azure e configurar kubeconfig'
+      inputs:
+        azureSubscription: $(azureSubscription)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          az aks get-credentials --resource-group $(AKS_RESOURCE_GROUP) --name $(AKS_CLUSTER_NAME) --overwrite-existing
+
+
+
+    # Aplicar o deployment atualizado no Kubernetes
+    - task: AzureCLI@2
+      displayName: 'Aplicar llm-deployment.yaml'
+      inputs:
+        azureSubscription: $(azureSubscription)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          kubectl apply -f llm-deployment.yaml
