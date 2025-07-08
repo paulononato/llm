@@ -1,0 +1,124 @@
+    apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: elevartech-core-llm
+---
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      labels:
+        service: llm-api-claim1
+      name: llm-api-claim1
+      namespace: elevartech-core-llm
+    spec:
+      accessModes:
+        - ReadWriteMany
+      resources:
+        requests:
+          storage: 1Gi
+      storageClassName: azurefile
+---
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      namespace: elevartech-core-llm
+      name: litellm-config-file
+    data:
+      config.yaml: |
+        model_list: 
+          - model_name: gpt-4o-mini
+            litellm_params:
+              model: openai/gpt-4o-mini
+              api_base: https://api.openai.com/v1
+              api_key: sk-svcacsdct-jdlhfkjlsdhfjlhdslNKLJNBSDJdi89&DjkHHSD-0
+
+        litellm_settings:
+          success_callback: ["langfuse"]
+          failure_callback: ["langfuse"]
+          callbacks: ["detect_prompt_injection"]
+          prompt_injection_params:
+            heuristics_check: true
+            similarity_check: true
+            llm_api_check: true
+            llm_api_name: gpt-4o-mini
+            llm_api_system_prompt: "Voce é um atendente gentil!'"
+            llm_api_fail_call_string: "UNSAFE"
+
+    apiVersion: v1
+    kind: Secret
+    type: Opaque
+    metadata:
+      namespace: elevartech-core-llm
+      name: litellm-secrets
+    data:
+      CA_AZURE_OPENAI_API_KEY: SJDHKJSAGHKJGBSADKSADASD== # your api key in base64
+---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      namespace: elevartech-core-llm
+      name: litellm-deployment
+      labels:
+        app: litellm
+    spec:
+      selector:
+        matchLabels:
+          app: litellm
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 1
+          maxSurge: 2
+      template:
+        metadata:
+          labels:
+            app: litellm
+        spec:
+          containers:
+            - name: litellm
+              image: ghcr.io/berriai/litellm:main-v1.61.7 # it is recommended to fix a version generally
+              ports:
+                - containerPort: 4000
+              volumeMounts:
+                - name: config-volume
+                  mountPath: /app/proxy_server_config.yaml
+                  subPath: config.yaml
+              envFrom:
+                - secretRef:
+                    name: litellm-secrets
+              env:
+                - name: LITELLM_MASTER_KEY
+                  value: "LSADHJLSAHDJLSAHDLSD"
+                - name: UI_LOGO_PATH
+                  value: "https://xxxxx/Lite.png"
+                - name: DATABASE_URL
+                  value: "postgres://service.elevartech:xxxxxxs.servicoelevartech@xxxxxxxxxxxxxx.svc.cluster.local:5432/elevartech-llm"
+                - name: STORE_MODEL_IN_DB
+                  value: "true"
+                - name: LANGFUSE_PUBLIC_KEY
+                  value: "pk-jAHSJHDJSBGHKjHSD"
+                - name: LANGFUSE_SECRET_KEY
+                  value: "sk-ASJLDHBKSAHBVDKJASBGDKJSAHBD"
+                - name: LANGFUSE_HOST
+                  value: "https://langfuse.selevartech.com.br"
+                - name: LITELLM_SALT_KEY
+                  value: "LJSADHJLSAHDJLKHASD"
+                - name: SLACK_WEBHOOK_URL
+                  value: "https://hooks.slack.com/services/DFFDSGDS/asdsaSDSA/"
+              readinessProbe:
+                httpGet:
+                  path: / # Caminho de saúde que será acessado
+                  port: 4000 # Porta para a qual a requisição será feita
+                initialDelaySeconds: 30 #Tempo de espera antes de começar a checar
+                periodSeconds: 15 # Intervalo entre as verificações
+                failureThreshold: 3 # Número de falhas antes de o Kubernetes considerar o pod não pronto
+                successThreshold: 1 # Número de sucessos necessários antes de o Kubernetes considerar o pod pronto
+
+          volumes:
+            - name: config-volume
+              configMap:
+                name: litellm-config-file
+
+            - name: llm-api-storage
+              persistentVolumeClaim:
+                claimName: llm-api-claim1
